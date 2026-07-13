@@ -179,6 +179,12 @@ def train_finetune(config: Dict[str, Any]) -> None:
         for batch_idx, batch in enumerate(train_loader):
             images = batch["image"].to(device, dtype=torch.float32)
             labels = batch["label"].to(device, dtype=torch.float32)
+            # Strip MONAI MetaTensor to plain Tensor to avoid __torch_function__
+            # overhead inside SwinUNETR gradient checkpointing
+            if hasattr(images, 'as_tensor'):
+                images = images.as_tensor()
+            if hasattr(labels, 'as_tensor'):
+                labels = labels.as_tensor()
             
             # Forward pass under autocast
             with torch.cuda.amp.autocast(enabled=(device.type == "cuda")):
@@ -197,6 +203,12 @@ def train_finetune(config: Dict[str, Any]) -> None:
                 
             epoch_loss += loss.item()
             
+            # Per-batch progress logging
+            if (batch_idx + 1) % 20 == 0 or (batch_idx + 1) == len(train_loader):
+                avg_loss = epoch_loss / (batch_idx + 1)
+                print(f"\r  Epoch {epoch}/{epochs} - Batch {batch_idx + 1}/{len(train_loader)} - Avg Loss: {avg_loss:.4f}", end="", flush=True)
+            
+        print()  # newline after batch progress
         mean_loss = epoch_loss / len(train_loader)
         
         # Validation epoch
@@ -206,6 +218,11 @@ def train_finetune(config: Dict[str, Any]) -> None:
             for val_batch in val_loader:
                 val_images = val_batch["image"].to(device, dtype=torch.float32)
                 val_labels = val_batch["label"].to(device, dtype=torch.float32)
+                # Strip MONAI MetaTensor
+                if hasattr(val_images, 'as_tensor'):
+                    val_images = val_images.as_tensor()
+                if hasattr(val_labels, 'as_tensor'):
+                    val_labels = val_labels.as_tensor()
                 
                 # Autocast validation forward pass
                 with torch.cuda.amp.autocast(enabled=(device.type == "cuda")):

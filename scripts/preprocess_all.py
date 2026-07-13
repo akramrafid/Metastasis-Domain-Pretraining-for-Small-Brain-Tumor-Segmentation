@@ -154,7 +154,12 @@ def main(limit: int, skip_missing: bool) -> None:
             )
             
             case_out_dir = os.path.join(output_base_dir, name, sub_name)
-            
+            meta_path = os.path.join(case_out_dir, "metadata.json")
+            if os.path.exists(meta_path):
+                if (idx + 1) % 50 == 0 or (idx + 1) == len(subjects):
+                    click.echo(f"  Skipped (already exists) {idx + 1}/{len(subjects)} cases...")
+                continue
+                
             try:
                 preprocess_case(
                     case_id=sub_name,

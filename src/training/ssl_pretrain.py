@@ -179,6 +179,10 @@ def train_ssl(config: Dict[str, Any]) -> None:
         
         for batch_idx, batch in enumerate(dataloader):
             images = batch["image"].to(device, dtype=torch.float32) # [B, 4, H, W, D]
+            # Strip MONAI MetaTensor to plain Tensor to avoid __torch_function__
+            # overhead inside SwinUNETR gradient checkpointing
+            if hasattr(images, 'as_tensor'):
+                images = images.as_tensor()
             
             # Generate two views with different maskings
             masked_a = apply_random_masking(images)
@@ -214,6 +218,12 @@ def train_ssl(config: Dict[str, Any]) -> None:
             epoch_contrast_loss += loss_contrast.item()
             epoch_total_loss += loss.item()
             
+            # Per-batch progress logging
+            if (batch_idx + 1) % 50 == 0 or (batch_idx + 1) == len(dataloader):
+                avg_loss = epoch_total_loss / (batch_idx + 1)
+                print(f"\r  Epoch {epoch}/{epochs} - Batch {batch_idx + 1}/{len(dataloader)} - Avg Loss: {avg_loss:.4f}", end="", flush=True)
+            
+        print()  # newline after batch progress
         # Logging
         mean_recon = epoch_recon_loss / len(dataloader)
         mean_contrast = epoch_contrast_loss / len(dataloader)

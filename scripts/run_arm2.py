@@ -15,12 +15,22 @@ def main(cfg: DictConfig) -> None:
     print(f"==================================================")
     
     # Step 1: Self-supervised pretraining on Pretreat-MetsToBrain
-    print("\n>>> Step 1: Starting Self-Supervised Pretraining...")
-    train_ssl(config)
+    pretrain_epochs = config.get("pretrain", {}).get("epochs", 0)
+    if pretrain_epochs > 0:
+        print(f"\n>>> Step 1: Starting Self-Supervised Pretraining ({pretrain_epochs} epochs)...")
+        train_ssl(config)
+    else:
+        print("\n>>> Step 1: Skipping pretraining (epochs=0).")
     
     # Step 2: Supervised fine-tuning on Pretreat-MetsToBrain
-    print("\n>>> Step 2: Starting Supervised Fine-tuning...")
-    train_finetune(config)
+    finetune_epochs = config.get("finetune", {}).get("epochs", 0)
+    if finetune_epochs > 0:
+        print(f"\n>>> Step 2: Starting Supervised Fine-tuning ({finetune_epochs} epochs)...")
+        train_finetune(config)
+    else:
+        print("\n>>> Step 2: Skipping fine-tuning (epochs=0).")
+        
+    print("\n>>> Arm 2 pipeline complete.")
 
 if __name__ == "__main__":
     main()

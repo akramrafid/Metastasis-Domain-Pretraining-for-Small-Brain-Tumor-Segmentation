@@ -15,4 +15,4 @@ wandb:
   entity: null
   mode: "offline"
 
-num_workers: 0
+num_workers: 2
