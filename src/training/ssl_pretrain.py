@@ -116,26 +116,48 @@ def train_ssl(config: Dict[str, Any]) -> None:
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["pretrain"]["epochs"])
     criterion_recon = nn.L1Loss()
     
+    epochs = config["pretrain"]["epochs"]
+    save_interval = config["pretrain"]["save_interval"]
+    checkpoint_dir = config.get("checkpoint_dir", "checkpoints")
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    
+    # Checkpoint-and-resume setup
+    start_epoch = 1
+    latest_state_path = os.path.join(checkpoint_dir, f"{config['name']}_pretrain_latest.pt")
+    if os.path.exists(latest_state_path):
+        logger.info(f"Found latest pretraining checkpoint at {latest_state_path}. Resuming...")
+        try:
+            checkpoint = torch.load(latest_state_path, map_location=device)
+            model.load_state_dict(checkpoint["model_state_dict"])
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+            start_epoch = checkpoint["epoch"] + 1
+            logger.info(f"Successfully resumed pretraining from epoch {start_epoch}")
+        except Exception as e:
+            logger.warning(f"Could not load resume checkpoint: {str(e)}. Training from scratch.")
+            
     # Initialize W&B logging if config specifies
     if config.get("wandb") and config["wandb"].get("mode") != "disabled":
         wandb.init(
             project=config["wandb"]["project"],
             name=f"pretrain_{config['name']}",
             config=config,
-            mode=config["wandb"].get("mode", "offline")
+            mode=config["wandb"].get("mode", "offline"),
+            resume="allow" if os.path.exists(latest_state_path) else None
         )
         
-    epochs = config["pretrain"]["epochs"]
-    save_interval = config["pretrain"]["save_interval"]
-    checkpoint_dir = config.get("checkpoint_dir", "checkpoints")
-    os.makedirs(checkpoint_dir, exist_ok=True)
+    # Setup mixed precision GradScaler
+    scaler = torch.cuda.amp.GradScaler(enabled=(device.type == "cuda"))
+    grad_accum_steps = config["pretrain"].get("grad_accum_steps", 4)
     
-    logger.info(f"Starting Pretraining for {epochs} epochs on {device}...")
-    for epoch in range(1, epochs + 1):
+    logger.info(f"Starting Pretraining from epoch {start_epoch} to {epochs} (Effective Batch Size: {config['pretrain']['batch_size'] * grad_accum_steps}) on {device}...")
+    for epoch in range(start_epoch, epochs + 1):
         model.train()
         epoch_recon_loss = 0.0
         epoch_contrast_loss = 0.0
         epoch_total_loss = 0.0
+        
+        optimizer.zero_grad()
         
         for batch_idx, batch in enumerate(dataloader):
             images = batch["image"].to(device) # [B, 4, H, W, D]
@@ -144,26 +166,32 @@ def train_ssl(config: Dict[str, Any]) -> None:
             masked_a = apply_random_masking(images)
             masked_b = apply_random_masking(images)
             
-            optimizer.zero_grad()
+            # Forward pass under autocast
+            with torch.cuda.amp.autocast(enabled=(device.type == "cuda")):
+                recon_a, emb_a = model(masked_a)
+                recon_b, emb_b = model(masked_b)
+                
+                # Reconstruction loss (against original images)
+                loss_recon = (criterion_recon(recon_a, images) + criterion_recon(recon_b, images)) / 2.0
+                
+                # Contrastive InfoNCE loss
+                loss_contrast = info_nce_loss(emb_a, emb_b)
+                
+                # Total loss scaled by gradient accumulation steps
+                w_recon = config["pretrain"].get("recon_loss_weight", 1.0)
+                w_contrast = config["pretrain"].get("contrast_loss_weight", 1.0)
+                loss = w_recon * loss_recon + w_contrast * loss_contrast
+                loss_scaled = loss / grad_accum_steps
+                
+            # Backward pass under scaled gradients
+            scaler.scale(loss_scaled).backward()
             
-            # Forward pass on both views
-            recon_a, emb_a = model(masked_a)
-            recon_b, emb_b = model(masked_b)
-            
-            # Reconstruction loss (against original images)
-            loss_recon = (criterion_recon(recon_a, images) + criterion_recon(recon_b, images)) / 2.0
-            
-            # Contrastive InfoNCE loss
-            loss_contrast = info_nce_loss(emb_a, emb_b)
-            
-            # Total loss
-            w_recon = config["pretrain"].get("recon_loss_weight", 1.0)
-            w_contrast = config["pretrain"].get("contrast_loss_weight", 1.0)
-            loss = w_recon * loss_recon + w_contrast * loss_contrast
-            
-            loss.backward()
-            optimizer.step()
-            
+            # Parameter update step
+            if (batch_idx + 1) % grad_accum_steps == 0 or (batch_idx + 1) == len(dataloader):
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
+                
             epoch_recon_loss += loss_recon.item()
             epoch_contrast_loss += loss_contrast.item()
             epoch_total_loss += loss.item()
@@ -185,9 +213,8 @@ def train_ssl(config: Dict[str, Any]) -> None:
                 "lr": optimizer.param_groups[0]["lr"]
             })
             
-        # Save checkpoint
+        # Save checkpoints
         if epoch % save_interval == 0 or epoch == epochs:
-            # We only need to save the SwinViT encoder weights for fine-tuning!
             ckpt_path = os.path.join(checkpoint_dir, f"{config['name']}_encoder_ep{epoch}.pt")
             logger.info(f"Saving encoder checkpoint to {ckpt_path}...")
             save_checkpoint(
@@ -195,6 +222,16 @@ def train_ssl(config: Dict[str, Any]) -> None:
                 filepath=ckpt_path
             )
             
+        # Save latest full state for resume
+        latest_state = {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+            "config": config
+        }
+        save_checkpoint(latest_state, latest_state_path)
+        
     if wandb.run:
         wandb.finish()
     logger.info("Pretraining completed successfully!")

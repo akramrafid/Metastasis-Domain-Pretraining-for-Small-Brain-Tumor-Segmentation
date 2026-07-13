@@ -117,33 +117,67 @@ def train_finetune(config: Dict[str, Any]) -> None:
     criterion = get_loss_function(loss_type, config["finetune"].get("loss_config", {}))
     
     # Initialize W&B logging if config specifies
+    epochs = config["finetune"]["epochs"]
+    checkpoint_dir = config.get("checkpoint_dir", "checkpoints")
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    best_val_loss = float("inf")
+    
+    # Checkpoint-and-resume setup
+    start_epoch = 1
+    latest_state_path = os.path.join(checkpoint_dir, f"{config['name']}_finetune_latest.pt")
+    if os.path.exists(latest_state_path):
+        logger.info(f"Found latest fine-tuning checkpoint at {latest_state_path}. Resuming...")
+        try:
+            checkpoint = torch.load(latest_state_path, map_location=device)
+            model.load_state_dict(checkpoint["model_state_dict"])
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+            start_epoch = checkpoint["epoch"] + 1
+            best_val_loss = checkpoint.get("best_val_loss", float("inf"))
+            logger.info(f"Successfully resumed fine-tuning from epoch {start_epoch} (Best Val Loss: {best_val_loss:.4f})")
+        except Exception as e:
+            logger.warning(f"Could not load resume checkpoint: {str(e)}. Training from scratch.")
+            
+    # Initialize W&B logging if config specifies
     if config.get("wandb") and config["wandb"].get("mode") != "disabled":
         wandb.init(
             project=config["wandb"]["project"],
             name=f"finetune_{config['name']}",
             config=config,
-            mode=config["wandb"].get("mode", "offline")
+            mode=config["wandb"].get("mode", "offline"),
+            resume="allow" if os.path.exists(latest_state_path) else None
         )
         
-    epochs = config["finetune"]["epochs"]
-    checkpoint_dir = config.get("checkpoint_dir", "checkpoints")
-    best_val_loss = float("inf")
+    # Setup mixed precision GradScaler
+    scaler = torch.cuda.amp.GradScaler(enabled=(device.type == "cuda"))
+    grad_accum_steps = config["finetune"].get("grad_accum_steps", 4)
     
-    logger.info(f"Starting Fine-tuning for {epochs} epochs using {loss_type} loss...")
-    for epoch in range(1, epochs + 1):
+    logger.info(f"Starting Fine-tuning from epoch {start_epoch} to {epochs} using {loss_type} loss (Effective Batch Size: {config['finetune']['batch_size'] * grad_accum_steps}) on {device}...")
+    for epoch in range(start_epoch, epochs + 1):
         model.train()
         epoch_loss = 0.0
         
-        for batch in train_loader:
+        optimizer.zero_grad()
+        
+        for batch_idx, batch in enumerate(train_loader):
             images = batch["image"].to(device)
             labels = batch["label"].to(device)
             
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+            # Forward pass under autocast
+            with torch.cuda.amp.autocast(enabled=(device.type == "cuda")):
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+                loss_scaled = loss / grad_accum_steps
+                
+            # Backward pass under scaled gradients
+            scaler.scale(loss_scaled).backward()
             
+            # Parameter update step
+            if (batch_idx + 1) % grad_accum_steps == 0 or (batch_idx + 1) == len(train_loader):
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
+                
             epoch_loss += loss.item()
             
         mean_loss = epoch_loss / len(train_loader)
@@ -155,9 +189,12 @@ def train_finetune(config: Dict[str, Any]) -> None:
             for val_batch in val_loader:
                 val_images = val_batch["image"].to(device)
                 val_labels = val_batch["label"].to(device)
-                val_outputs = model(val_images)
-                val_loss += criterion(val_outputs, val_labels).item()
                 
+                # Autocast validation forward pass
+                with torch.cuda.amp.autocast(enabled=(device.type == "cuda")):
+                    val_outputs = model(val_images)
+                    val_loss += criterion(val_outputs, val_labels).item()
+                    
         mean_val_loss = val_loss / len(val_loader)
         logger.info(f"Epoch {epoch}/{epochs} - Train Loss: {mean_loss:.4f} - Val Loss: {mean_val_loss:.4f}")
         scheduler.step()
@@ -180,6 +217,17 @@ def train_finetune(config: Dict[str, Any]) -> None:
                 filepath=ckpt_path
             )
             
+        # Save latest full state for resume
+        latest_state = {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+            "best_val_loss": best_val_loss,
+            "config": config
+        }
+        save_checkpoint(latest_state, latest_state_path)
+        
     if wandb.run:
         wandb.finish()
     logger.info("Fine-tuning completed successfully!")
