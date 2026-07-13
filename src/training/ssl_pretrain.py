@@ -1,8 +1,9 @@
 """
 Self-supervised pretraining loop using reconstruction and contrastive heads.
 """
-from typing import Dict, Any
+from typing import Dict, Any, List
 import os
+import json
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -67,13 +68,45 @@ def train_ssl(config: Dict[str, Any]) -> None:
     set_seed(config.get("seed", 42))
     device = torch.device(config.get("device", "cuda") if torch.cuda.is_available() else "cpu")
     
+    # 1. Identify validation and test splits to exclude them from pretraining (prevent data leakage)
+    val_cases: List[str] = []
+    test_cases: List[str] = []
+    
+    if config["pretrain"]["data"] == "pretreat_m2b":
+        splits_path = os.path.join(config.get("checkpoint_dir", "checkpoints"), "splits.json")
+        if os.path.exists(splits_path):
+            logger.info(f"Loading splits from {splits_path} to exclude val/test sets from pretraining...")
+            with open(splits_path, "r") as f:
+                splits = json.load(f)
+            val_cases = splits.get("val", [])
+            test_cases = splits.get("test", [])
+        else:
+            # Dynamically compute splits from the preprocessed cases if splits.json doesn't exist yet
+            preprocessed_dir = config.get("preprocessed_dir", "data/preprocessed")
+            dataset_dir = os.path.join(preprocessed_dir, "pretreat_m2b")
+            if os.path.exists(dataset_dir):
+                logger.info(f"Computing splits dynamically from {dataset_dir} to exclude val/test sets from pretraining...")
+                all_cases = sorted(os.listdir(dataset_dir))
+                from src.training.finetune import get_deterministic_splits
+                _, val_cases, test_cases = get_deterministic_splits(all_cases, seed=config.get("seed", 42))
+                
+    exclude_list = val_cases + test_cases
+    logger.info(f"Excluding {len(exclude_list)} val/test cases from pretraining...")
+    
     logger.info("Building pretraining DataLoader...")
     dataloader = build_dataloader(
         dataset_name=config["pretrain"]["data"],
         split="train",
         batch_size=config["pretrain"]["batch_size"],
-        preprocessed_dir=config.get("preprocessed_dir", "data/preprocessed")
+        preprocessed_dir=config.get("preprocessed_dir", "data/preprocessed"),
+        exclude_cases=exclude_list
     )
+    
+    # Hard assertion to prevent data leakage permanently
+    exclude_set = set(exclude_list)
+    loaded_cases = set(dataloader.dataset.cases)
+    intersection = loaded_cases.intersection(exclude_set)
+    assert len(intersection) == 0, f"CRITICAL: DATA LEAKAGE DETECTED! SSL pretraining contains fine-tuning val/test cases: {intersection}"
     
     logger.info("Initializing Swin UNETR and SSL Heads...")
     model = SSLHeads(config=config["model"])

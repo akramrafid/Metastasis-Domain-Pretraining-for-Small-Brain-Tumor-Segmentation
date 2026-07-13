@@ -46,6 +46,18 @@ DATASETS_INFO = {
         "channel_mask": [1, 1, 0, 1],
         "label": "seg.nii.gz"
     },
+    "brainmetshare_test": {
+        "root": "brainmetshare_data/test_NifTI",
+        "pattern": "Mets_*",
+        "channels": {
+            "t1_pre": "t1_pre.nii.gz",
+            "t1_post": "t1_gd.nii.gz",
+            "t2": None,
+            "flair": "flair.nii.gz"
+        },
+        "channel_mask": [1, 1, 0, 1],
+        "label": None
+    },
     "ucsf_bmsr": {
         "root": "UCSF_BrainMetastases_v1.3/UCSF_BrainMetastases_TRAIN",
         "pattern": "*",
@@ -69,10 +81,10 @@ def resolve_channel_paths(sub_dir: str, name: str, sub_name: str, channels: Dict
             continue
             
         # Format filename pattern
-        if name in ["brats_gli", "pretreat_m2b", "ucsf_bmsr"]:
-            filename = f"{sub_name}{suffix}"
-        else: # brainmetshare
+        if name.startswith("brainmetshare"):
             filename = suffix
+        else: 
+            filename = f"{sub_name}{suffix}"
             
         path = os.path.join(sub_dir, filename)
         if os.path.exists(path):
@@ -84,10 +96,10 @@ def resolve_channel_paths(sub_dir: str, name: str, sub_name: str, channels: Dict
             
     # Resolve label
     if label_pattern:
-        if name in ["brats_gli", "pretreat_m2b", "ucsf_bmsr"]:
-            filename = f"{sub_name}{label_pattern}"
-        else:
+        if name.startswith("brainmetshare"):
             filename = label_pattern
+        else:
+            filename = f"{sub_name}{label_pattern}"
             
         path = os.path.join(sub_dir, filename)
         if os.path.exists(path):

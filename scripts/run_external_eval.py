@@ -19,7 +19,8 @@ def main(cfg: DictConfig) -> None:
     checkpoints = {
         "arm0": "checkpoints/arm0_finetuned_best.pt",
         "arm1": "checkpoints/arm1_finetuned_best.pt",
-        "arm2": "checkpoints/arm2_finetuned_best.pt"
+        "arm2": "checkpoints/arm2_finetuned_best.pt",
+        "arm3": "checkpoints/arm3_finetuned_best.pt"
     }
     
     results_dir = "outputs/results"
@@ -40,15 +41,23 @@ def main(cfg: DictConfig) -> None:
     cohorts = {
         "pretreat_m2b_test": {
             "dataset_name": "pretreat_m2b",
-            "cases": test_cases
+            "cases": test_cases,
+            "labeled": True
         },
         "brainmetshare": {
             "dataset_name": "brainmetshare",
-            "cases": None
+            "cases": None,
+            "labeled": True
+        },
+        "brainmetshare_test": {
+            "dataset_name": "brainmetshare_test",
+            "cases": None,
+            "labeled": False
         },
         "ucsf_bmsr": {
             "dataset_name": "ucsf_bmsr",
-            "cases": None
+            "cases": None,
+            "labeled": True
         }
     }
     
@@ -75,7 +84,8 @@ def main(cfg: DictConfig) -> None:
                     model_path=ckpt_path,
                     dataset_name=dataset_name,
                     allowed_cases=cohort_info["cases"],
-                    device=device
+                    device=device,
+                    labeled=cohort_info["labeled"]
                 )
                 
                 # Save summary metrics

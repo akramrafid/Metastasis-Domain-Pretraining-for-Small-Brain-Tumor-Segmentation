@@ -24,7 +24,8 @@ def run_evaluation(
     dataset_name: str,
     preprocessed_dir: str = "data/preprocessed",
     allowed_cases: Optional[List[str]] = None,
-    device: str = "cuda"
+    device: str = "cuda",
+    labeled: bool = True
 ) -> Tuple[Dict[str, float], Dict[str, Dict[str, float]]]:
     """Runs inference and calculates performance metrics on a dataset.
     
@@ -34,6 +35,7 @@ def run_evaluation(
         preprocessed_dir: Path to preprocessed data root directory.
         allowed_cases: Optional list of case IDs to evaluate (e.g., test split cases).
         device: Device to run inference on.
+        labeled: Whether the target dataset has labels to compute Dice, etc.
         
     Returns:
         Tuple of:
@@ -57,9 +59,6 @@ def run_evaluation(
     logger.info(f"Evaluating model {model_path} on dataset {dataset_name} ({len(dataset)} cases)...")
     
     # Initialize model wrapper
-    # We load model config from check point or assume standard config
-    # In a real pipeline, we save model architecture args in checkpoint
-    # We will instantiate standard SwinUNETRWrapper matching our config
     dummy_config = {"in_channels": 4, "out_channels": 3, "feature_size": 48, "use_checkpoint": False}
     model = SwinUNETRWrapper(config=dummy_config)
     
@@ -94,33 +93,37 @@ def run_evaluation(
             )
             
             # Apply argmax or soft thresholding to get binary labels
-            # Output shape [1, 3, H, W, D]. We use argmax along channel dimension
             pred_labels = torch.argmax(outputs, dim=1)  # [1, H, W, D]
             
-            # Standard multi-class target is usually [1, 1, H, W, D], we squeeze channel dimension
-            target_labels = torch.argmax(labels, dim=1) if labels.shape[1] > 1 else labels.squeeze(1) # [1, H, W, D]
-            
             pred_binary = (pred_labels > 0)
-            target_binary = (target_labels > 0)
-            
-            # Squeeze to 3D for metrics calculation
             pred_3d = pred_binary[0]
-            target_3d = target_binary[0]
             
-            # Calculate metrics
-            dice = compute_dice(pred_3d, target_3d)
-            sens = compute_sensitivity(pred_3d, target_3d)
-            spec = compute_specificity(pred_3d, target_3d)
-            hd95 = compute_hd95(pred_3d, target_3d)
-            lesion_f1 = compute_lesion_f1(pred_3d, target_3d)
-            
-            patient_metrics[case_id] = {
-                "dice": dice,
-                "sensitivity": sens,
-                "specificity": spec,
-                "hd95": hd95,
-                "lesion_f1": lesion_f1
-            }
+            if labeled:
+                # Standard multi-class target is usually [1, 1, H, W, D], we squeeze channel dimension
+                target_labels = torch.argmax(labels, dim=1) if labels.shape[1] > 1 else labels.squeeze(1) # [1, H, W, D]
+                target_binary = (target_labels > 0)
+                target_3d = target_binary[0]
+                
+                # Calculate metrics
+                dice = compute_dice(pred_3d, target_3d)
+                sens = compute_sensitivity(pred_3d, target_3d)
+                spec = compute_specificity(pred_3d, target_3d)
+                hd95 = compute_hd95(pred_3d, target_3d)
+                lesion_f1 = compute_lesion_f1(pred_3d, target_3d)
+                
+                patient_metrics[case_id] = {
+                    "dice": dice,
+                    "sensitivity": sens,
+                    "specificity": spec,
+                    "hd95": hd95,
+                    "lesion_f1": lesion_f1
+                }
+            else:
+                # Unlabeled case: calculate detection rate (1.0 if any predicted lesion, 0.0 otherwise)
+                has_detection = float(torch.sum(pred_3d).item() > 0)
+                patient_metrics[case_id] = {
+                    "detection_rate": has_detection
+                }
             
             # Log progress
             if (idx + 1) % 5 == 0 or (idx + 1) == len(dataset):
@@ -128,15 +131,23 @@ def run_evaluation(
                 
     # Calculate summary metrics (means)
     summary_metrics = {}
-    metrics_keys = ["dice", "sensitivity", "specificity", "hd95", "lesion_f1"]
-    
-    for k in metrics_keys:
-        values = [p[k] for p in patient_metrics.values() if not np.isnan(p[k])]
+    if labeled:
+        metrics_keys = ["dice", "sensitivity", "specificity", "hd95", "lesion_f1"]
+        for k in metrics_keys:
+            values = [p[k] for p in patient_metrics.values() if not np.isnan(p[k])]
+            if values:
+                summary_metrics[f"mean_{k}"] = float(np.mean(values))
+                summary_metrics[f"std_{k}"] = float(np.std(values))
+            else:
+                summary_metrics[f"mean_{k}"] = float('nan')
+                summary_metrics[f"std_{k}"] = float('nan')
+    else:
+        values = [p["detection_rate"] for p in patient_metrics.values()]
         if values:
-            summary_metrics[f"mean_{k}"] = float(np.mean(values))
-            summary_metrics[f"std_{k}"] = float(np.std(values))
+            summary_metrics["mean_detection_rate"] = float(np.mean(values))
+            summary_metrics["std_detection_rate"] = float(np.std(values))
         else:
-            summary_metrics[f"mean_{k}"] = float('nan')
-            summary_metrics[f"std_{k}"] = float('nan')
+            summary_metrics["mean_detection_rate"] = float('nan')
+            summary_metrics["std_detection_rate"] = float('nan')
             
     return summary_metrics, patient_metrics
