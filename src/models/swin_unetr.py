@@ -24,7 +24,7 @@ class SwinUNETRWrapper(nn.Module):
         super().__init__()
         self.config = config
         
-        self.model = SwinUNETR(
+        self.model = SwinUNETR(  # type: ignore[call-arg]
             img_size=tuple(config.get("img_size", (96, 96, 96))),
             in_channels=config.get("in_channels", 4),
             out_channels=config.get("out_channels", 3),

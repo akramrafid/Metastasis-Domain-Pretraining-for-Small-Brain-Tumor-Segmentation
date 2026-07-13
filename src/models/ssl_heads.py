@@ -26,8 +26,8 @@ class SSLHeads(nn.Module):
         self.config = config
         
         # Reconstruction network is a SwinUNETR with out_channels = in_channels (e.g., 4)
-        self.swin_unetr = SwinUNETR(
-            img_size=config.get("img_size", (96, 96, 96)),
+        self.swin_unetr = SwinUNETR(  # type: ignore[call-arg]
+            img_size=tuple(config.get("img_size", (96, 96, 96))),
             in_channels=config.get("in_channels", 4),
             out_channels=config.get("in_channels", 4), # Reconstruct all input channels
             feature_size=config.get("feature_size", 48),
