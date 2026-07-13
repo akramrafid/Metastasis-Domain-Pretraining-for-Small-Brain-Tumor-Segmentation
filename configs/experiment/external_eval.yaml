@@ -1,0 +1,17 @@
+# configs/experiment/external_eval.yaml
+name: "external_eval"
+
+checkpoints:
+  arm0: "checkpoints/arm0_finetuned_best.pt"
+  arm1: "checkpoints/arm1_finetuned_best.pt"
+  arm2: "checkpoints/arm2_finetuned_best.pt"
+
+eval_datasets:
+  brainmetshare:
+    enabled: true
+    config_name: "brainmetshare"
+  ucsf_bmsr:
+    enabled: true
+    config_name: "ucsf_bmsr"
+
+batch_size: 1

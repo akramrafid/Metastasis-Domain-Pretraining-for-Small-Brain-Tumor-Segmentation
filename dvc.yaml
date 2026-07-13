@@ -1,0 +1,22 @@
+stages:
+  preprocess:
+    cmd: python scripts/preprocess_all.py
+    deps:
+      - scripts/preprocess_all.py
+      - src/data/preprocessing.py
+    outs:
+      - data/preprocessed
+  pretrain_arm1:
+    cmd: python scripts/run_arm1.py
+    deps:
+      - scripts/run_arm1.py
+      - data/preprocessed
+    outs:
+      - checkpoints/arm1_encoder_ep100.pt
+  pretrain_arm2:
+    cmd: python scripts/run_arm2.py
+    deps:
+      - scripts/run_arm2.py
+      - data/preprocessed
+    outs:
+      - checkpoints/arm2_encoder_ep100.pt

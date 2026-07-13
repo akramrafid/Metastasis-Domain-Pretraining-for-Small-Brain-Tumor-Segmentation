@@ -1,0 +1,15 @@
+defaults:
+  - data: pretreat_m2b
+  - model: swin_unetr
+  - _self_
+
+seed: 42
+device: "cuda"
+output_dir: "outputs"
+checkpoint_dir: "checkpoints"
+log_dir: "logs"
+
+wandb:
+  project: "brain-mets-domain-pretrain"
+  entity: null
+  mode: "offline"

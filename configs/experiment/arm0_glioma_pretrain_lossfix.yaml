@@ -1,0 +1,22 @@
+# configs/experiment/arm0_glioma_pretrain_lossfix.yaml
+defaults:
+  - override /data: brats_gli
+
+name: "arm0_glioma_pretrain_lossfix"
+
+pretrain:
+  data: "brats_gli"
+  epochs: 100
+  lr: 2e-4
+  batch_size: 2
+  save_interval: 10
+  recon_loss_weight: 1.0
+  contrast_loss_weight: 1.0
+
+finetune:
+  data: "pretreat_m2b"
+  epochs: 50
+  lr: 1e-4
+  batch_size: 1
+  loss_type: "sens_spec_tradeoff"
+  pretrained_path: "checkpoints/arm1_encoder_ep100.pt"

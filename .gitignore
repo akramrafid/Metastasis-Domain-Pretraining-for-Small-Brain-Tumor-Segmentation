@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Caches and outputs
+.pytest_cache/
+.ruff_cache/
+.hydra/
+outputs/
+multirun/
+logs/
+
+# Data and checkpoints (tracked via DVC)
+data/
+checkpoints/
+*.pt
+*.h5
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Raw Datasets and mapping sheets
+ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData/
+ASNR-MICCAI-BraTS2023-GLI-Challenge-ValidationData/
+brainmetshare_data/
+PKG - Pretreat-MetsToBrain-Masks/
+UCSF_BrainMetastases_v1.3/
+*.xlsx
