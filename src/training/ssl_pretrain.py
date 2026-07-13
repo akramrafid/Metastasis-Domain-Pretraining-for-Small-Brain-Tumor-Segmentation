@@ -68,6 +68,23 @@ def train_ssl(config: Dict[str, Any]) -> None:
     set_seed(config.get("seed", 42))
     device = torch.device(config.get("device", "cuda") if torch.cuda.is_available() else "cpu")
     
+    # Configure file logging dynamically
+    log_dir = config.get("log_dir", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file_path = os.path.join(log_dir, f"{config['name']}_pretrain.log")
+    
+    import logging
+    has_file_handler = any(isinstance(h, logging.FileHandler) for h in logger.handlers)
+    if not has_file_handler:
+        formatter = logging.Formatter(
+            "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+        fh = logging.FileHandler(log_file_path)
+        fh.setLevel(logging.INFO)
+        fh.setFormatter(formatter)
+        logger.addHandler(fh)
+    
     # 1. Identify validation and test splits to exclude them from pretraining (prevent data leakage)
     val_cases: List[str] = []
     test_cases: List[str] = []
@@ -98,6 +115,7 @@ def train_ssl(config: Dict[str, Any]) -> None:
         dataset_name=config["pretrain"]["data"],
         split="train",
         batch_size=config["pretrain"]["batch_size"],
+        num_workers=config.get("num_workers", 0),
         preprocessed_dir=config.get("preprocessed_dir", "data/preprocessed"),
         exclude_cases=exclude_list
     )
@@ -160,7 +178,7 @@ def train_ssl(config: Dict[str, Any]) -> None:
         optimizer.zero_grad()
         
         for batch_idx, batch in enumerate(dataloader):
-            images = batch["image"].to(device) # [B, 4, H, W, D]
+            images = batch["image"].to(device, dtype=torch.float32) # [B, 4, H, W, D]
             
             # Generate two views with different maskings
             masked_a = apply_random_masking(images)

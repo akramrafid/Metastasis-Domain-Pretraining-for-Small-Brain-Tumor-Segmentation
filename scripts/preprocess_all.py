@@ -11,7 +11,10 @@ from src.data.preprocessing import preprocess_case
 
 DATASETS_INFO = {
     "brats_gli": {
-        "root": "ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData",
+        "root": [
+            "ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData",
+            "ASNR-MICCAI-BraTS2023-GLI-Challenge-ValidationData"
+        ],
         "pattern": "*",
         "channels": {
             "t1_pre": "*-t1n.nii.gz",
@@ -121,16 +124,22 @@ def main(limit: int, skip_missing: bool) -> None:
     os.makedirs(output_base_dir, exist_ok=True)
     
     for name, info in DATASETS_INFO.items():
-        root = info["root"]
-        if not os.path.exists(root):
-            if skip_missing:
-                click.echo(f"Skipping missing dataset {name} at {root}...")
-                continue
-            else:
-                raise FileNotFoundError(f"Required dataset directory {root} not found.")
-                
-        subjects = glob.glob(os.path.join(root, info["pattern"]))
-        subjects = [s for s in subjects if os.path.isdir(s)]
+        roots = info["root"]
+        if isinstance(roots, str):
+            roots = [roots]
+            
+        subjects = []
+        for root in roots:
+            if not os.path.exists(root):
+                if skip_missing:
+                    click.echo(f"Skipping missing directory {root} for dataset {name}...")
+                    continue
+                else:
+                    raise FileNotFoundError(f"Required directory {root} not found.")
+            root_subjects = glob.glob(os.path.join(root, info["pattern"]))
+            root_subjects = [s for s in root_subjects if os.path.isdir(s)]
+            subjects.extend(root_subjects)
+            
         subjects.sort()
         
         if limit > 0:

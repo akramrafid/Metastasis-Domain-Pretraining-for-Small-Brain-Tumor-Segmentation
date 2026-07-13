@@ -79,8 +79,8 @@ def run_evaluation(
             case_id = batch["case_id"]
             
             # Inputs shape [C, H, W, D], add batch dimension [1, C, H, W, D]
-            images = torch.from_numpy(batch["image"]).unsqueeze(0).to(device_obj)
-            labels = torch.from_numpy(batch["label"]).unsqueeze(0).to(device_obj)
+            images = torch.from_numpy(batch["image"]).unsqueeze(0).to(device_obj, dtype=torch.float32)
+            labels = torch.from_numpy(batch["label"]).unsqueeze(0).to(device_obj, dtype=torch.float32)
             
             # Sliding window inference
             outputs = sliding_window_inference(

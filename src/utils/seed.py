@@ -11,6 +11,24 @@ def set_seed(seed: int) -> None:
     Args:
         seed: The integer seed value.
     """
+    # Globally patch MONAI transform seed limits for Windows 32-bit signed C-long compatibility
+    try:
+        import monai
+        import monai.utils
+        import monai.utils.misc
+        import monai.transforms.compose
+        import monai.transforms.transform
+        
+        win_max_seed = 2147483647
+        monai.utils.MAX_SEED = win_max_seed
+        monai.utils.misc.MAX_SEED = win_max_seed
+        monai.transforms.compose.MAX_SEED = win_max_seed
+        monai.transforms.transform.MAX_SEED = win_max_seed
+        
+        monai.utils.set_determinism(seed=seed)
+    except ImportError:
+        pass
+        
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)

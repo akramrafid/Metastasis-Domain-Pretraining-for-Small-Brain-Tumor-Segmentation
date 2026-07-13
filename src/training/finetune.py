@@ -64,6 +64,23 @@ def train_finetune(config: Dict[str, Any]) -> None:
     set_seed(config.get("seed", 42))
     device = torch.device(config.get("device", "cuda") if torch.cuda.is_available() else "cpu")
     
+    # Configure file logging dynamically
+    log_dir = config.get("log_dir", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file_path = os.path.join(log_dir, f"{config['name']}_finetune.log")
+    
+    import logging
+    has_file_handler = any(isinstance(h, logging.FileHandler) for h in logger.handlers)
+    if not has_file_handler:
+        formatter = logging.Formatter(
+            "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+        fh = logging.FileHandler(log_file_path)
+        fh.setLevel(logging.INFO)
+        fh.setFormatter(formatter)
+        logger.addHandler(fh)
+    
     preprocessed_dir = config.get("preprocessed_dir", "data/preprocessed")
     dataset_name = config["finetune"]["data"]
     
@@ -160,8 +177,8 @@ def train_finetune(config: Dict[str, Any]) -> None:
         optimizer.zero_grad()
         
         for batch_idx, batch in enumerate(train_loader):
-            images = batch["image"].to(device)
-            labels = batch["label"].to(device)
+            images = batch["image"].to(device, dtype=torch.float32)
+            labels = batch["label"].to(device, dtype=torch.float32)
             
             # Forward pass under autocast
             with torch.cuda.amp.autocast(enabled=(device.type == "cuda")):
@@ -187,8 +204,8 @@ def train_finetune(config: Dict[str, Any]) -> None:
         val_loss = 0.0
         with torch.no_grad():
             for val_batch in val_loader:
-                val_images = val_batch["image"].to(device)
-                val_labels = val_batch["label"].to(device)
+                val_images = val_batch["image"].to(device, dtype=torch.float32)
+                val_labels = val_batch["label"].to(device, dtype=torch.float32)
                 
                 # Autocast validation forward pass
                 with torch.cuda.amp.autocast(enabled=(device.type == "cuda")):

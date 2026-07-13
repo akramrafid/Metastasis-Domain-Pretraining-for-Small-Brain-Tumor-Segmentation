@@ -18,6 +18,12 @@ DATASETS = {
         "is_dir": True,
         "files": ["-t1n.nii.gz", "-t1c.nii.gz", "-t2w.nii.gz", "-t2f.nii.gz", "-seg.nii.gz"]
     },
+    "BraTS-GLI-Val": {
+        "path": "ASNR-MICCAI-BraTS2023-GLI-Challenge-ValidationData",
+        "pattern": "*",
+        "is_dir": True,
+        "files": ["-t1n.nii.gz", "-t1c.nii.gz", "-t2w.nii.gz", "-t2f.nii.gz"]
+    },
     "Pretreat-MetsToBrain": {
         "path": "PKG - Pretreat-MetsToBrain-Masks/Pretreat-MetsToBrain-Masks",
         "pattern": "*",
@@ -80,7 +86,7 @@ def validate_dataset(name: str, info: Dict[str, Any]) -> Dict[str, Any]:
         # Check files existence
         for suffix in info["files"]:
             # For UCSF, suffix contains subject name prefix sometimes, so we check endswith or match
-            if name in ["BraTS-GLI-Train", "Pretreat-MetsToBrain"]:
+            if name in ["BraTS-GLI-Train", "BraTS-GLI-Val", "Pretreat-MetsToBrain"]:
                 expected_filename = f"{sub_name}{suffix}"
             elif name == "UCSF-BMSR-Train":
                 expected_filename = f"{sub_name}{suffix}"

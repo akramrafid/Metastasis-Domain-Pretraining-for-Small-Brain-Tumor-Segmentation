@@ -1,6 +1,7 @@
 defaults:
   - data: pretreat_m2b
   - model: swin_unetr
+  - experiment@_global_: null
   - _self_
 
 seed: 42
@@ -13,3 +14,5 @@ wandb:
   project: "brain-mets-domain-pretrain"
   entity: null
   mode: "offline"
+
+num_workers: 0

@@ -25,6 +25,7 @@ class SwinUNETRWrapper(nn.Module):
         self.config = config
         
         self.model = SwinUNETR(
+            img_size=tuple(config.get("img_size", (96, 96, 96))),
             in_channels=config.get("in_channels", 4),
             out_channels=config.get("out_channels", 3),
             feature_size=config.get("feature_size", 48),
@@ -44,4 +45,4 @@ class SwinUNETRWrapper(nn.Module):
         
     def get_encoder(self) -> nn.Module:
         """Returns the Swin ViT encoder backbone."""
-        return self.model.swin_vit
+        return self.model.swinViT

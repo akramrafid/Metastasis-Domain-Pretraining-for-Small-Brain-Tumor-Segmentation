@@ -1,6 +1,5 @@
 # configs/experiment/arm1_glioma_pretrain_baseline.yaml
-defaults:
-  - override /data: brats_gli
+# @package _global_
 
 name: "arm1_glioma_pretrain_baseline"
 

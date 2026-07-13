@@ -27,6 +27,7 @@ class SSLHeads(nn.Module):
         
         # Reconstruction network is a SwinUNETR with out_channels = in_channels (e.g., 4)
         self.swin_unetr = SwinUNETR(
+            img_size=config.get("img_size", (96, 96, 96)),
             in_channels=config.get("in_channels", 4),
             out_channels=config.get("in_channels", 4), # Reconstruct all input channels
             feature_size=config.get("feature_size", 48),
@@ -58,8 +59,8 @@ class SSLHeads(nn.Module):
                 - reconstructed_volume: [B, C, H, W, D]
                 - contrastive_embedding: [B, projection_dim]
         """
-        # Get encoder features. MONAI's SwinUNETR.swin_vit returns hidden states
-        hidden_states = self.swin_unetr.swin_vit(x)
+        # Get encoder features. MONAI's SwinUNETR.swinViT returns hidden states
+        hidden_states = self.swin_unetr.swinViT(x)
         # The final bottleneck feature is the last element of the hidden states list
         bottleneck = hidden_states[-1]
         
@@ -75,4 +76,4 @@ class SSLHeads(nn.Module):
         
     def get_encoder_state_dict(self) -> dict:
         """Returns the state dict of the SwinViT encoder backbone."""
-        return self.swin_unetr.swin_vit.state_dict()
+        return self.swin_unetr.swinViT.state_dict()
