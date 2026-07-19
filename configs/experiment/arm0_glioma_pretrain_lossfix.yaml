@@ -20,5 +20,5 @@ finetune:
   lr: 1e-4
   batch_size: 1
   loss_type: "sens_spec_tradeoff"
-  pretrained_path: "checkpoints/arm1_encoder_ep100.pt"
+  pretrained_path: "checkpoints/arm0_glioma_pretrain_lossfix_encoder_ep100.pt"
   grad_accum_steps: 4

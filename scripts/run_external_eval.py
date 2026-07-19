@@ -17,10 +17,10 @@ def main(cfg: DictConfig) -> None:
     
     # Checkpoints to evaluate
     checkpoints = {
-        "arm0": "checkpoints/arm0_finetuned_best.pt",
-        "arm1": "checkpoints/arm1_finetuned_best.pt",
-        "arm2": "checkpoints/arm2_finetuned_best.pt",
-        "arm3": "checkpoints/arm3_finetuned_best.pt"
+        "arm0": "checkpoints/arm0_glioma_pretrain_lossfix_finetuned_best.pt",
+        "arm1": "checkpoints/arm1_glioma_pretrain_baseline_finetuned_best.pt",
+        "arm2": "checkpoints/arm2_metastasis_pretrain_proposed_finetuned_best.pt",
+        "arm3": "checkpoints/arm3_combined_finetuned_best.pt"
     }
     
     results_dir = "outputs/results"
@@ -77,6 +77,12 @@ def main(cfg: DictConfig) -> None:
                 logger.warning(f"Dataset {dataset_name} has not been preprocessed. Skipping evaluation on {cohort_name}.")
                 continue
                 
+            summary_path = os.path.join(results_dir, f"{model_name}_{cohort_name}_summary.json")
+            patient_path = os.path.join(results_dir, f"{model_name}_{cohort_name}_patients.json")
+            if os.path.exists(summary_path) and os.path.exists(patient_path):
+                logger.info(f"  Results already exist for {model_name} on {cohort_name}. Skipping to resume.")
+                continue
+
             logger.info(f"Evaluating {model_name} on {cohort_name}...")
             
             try:

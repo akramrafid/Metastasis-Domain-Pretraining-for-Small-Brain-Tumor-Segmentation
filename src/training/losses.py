@@ -46,9 +46,19 @@ class SensitivitySpecificityLoss(nn.Module):
             # Binary/Multi-label: apply sigmoid
             probs = torch.sigmoid(pred)
 
+        # Convert integer labels to one-hot if needed
+        # (target shape [B, 1, H, W, D] with integer class indices)
+        num_channels = probs.shape[1]
+        if target.shape[1] == 1 and num_channels > 1:
+            target_long = target.long().squeeze(1)  # [B, H, W, D]
+            target = torch.nn.functional.one_hot(
+                target_long, num_classes=num_channels
+            )  # [B, H, W, D, C]
+            # Move class dim to position 1: [B, C, H, W, D]
+            target = target.permute(0, 4, 1, 2, 3).float()
+
         # Determine channels to iterate over
         start_channel = 0 if self.include_background else 1
-        num_channels = probs.shape[1]
 
         total_loss = torch.tensor(0.0, device=pred.device)
         channels_counted = 0

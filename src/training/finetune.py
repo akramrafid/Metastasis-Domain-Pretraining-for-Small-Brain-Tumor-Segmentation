@@ -9,6 +9,7 @@ import torch
 import torch.optim as optim
 import wandb
 from monai.data import DataLoader as MonaiDataLoader
+from monai.inferers import sliding_window_inference
 from src.data.datasets import BrainModalityDataset
 from src.data.dataloader_factory import get_transforms
 from src.models.swin_unetr import SwinUNETRWrapper
@@ -226,7 +227,14 @@ def train_finetune(config: Dict[str, Any]) -> None:
                 
                 # Autocast validation forward pass
                 with torch.cuda.amp.autocast(enabled=(device.type == "cuda")):
-                    val_outputs = model(val_images)
+                    val_outputs = sliding_window_inference(
+                        inputs=val_images,
+                        roi_size=patch_size,
+                        sw_batch_size=4,
+                        predictor=model,
+                        overlap=0.25,
+                        device=device
+                    )
                     val_loss += criterion(val_outputs, val_labels).item()
                     
         mean_val_loss = val_loss / len(val_loader)

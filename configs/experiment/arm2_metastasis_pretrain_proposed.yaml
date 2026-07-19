@@ -20,5 +20,5 @@ finetune:
   lr: 1e-4
   batch_size: 1
   loss_type: "dice_ce"
-  pretrained_path: "checkpoints/arm2_encoder_ep100.pt"
+  pretrained_path: "checkpoints/arm2_metastasis_pretrain_proposed_encoder_ep100.pt"
   grad_accum_steps: 4

@@ -19,5 +19,5 @@ finetune:
   lr: 1e-4
   batch_size: 1
   loss_type: "dice_ce"
-  pretrained_path: "checkpoints/arm1_encoder_ep100.pt"
+  pretrained_path: "checkpoints/arm1_glioma_pretrain_baseline_encoder_ep100.pt"
   grad_accum_steps: 4
