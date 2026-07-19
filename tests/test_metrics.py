@@ -52,3 +52,5 @@ def test_lesion_f1() -> None:
     # Recall = 1/2 = 0.5, Precision = 1/2 = 0.5 -> F1 = 0.5
     f1 = compute_lesion_f1(pred, target)
     assert abs(f1 - 0.5) < 1e-5
+
+

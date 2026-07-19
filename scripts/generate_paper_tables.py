@@ -12,7 +12,16 @@ from src.evaluation.statistical_tests import run_significance_test, benjamini_ho
 
 COHORTS = ["pretreat_m2b_test", "brainmetshare", "brainmetshare_test", "ucsf_bmsr"]
 ARMS = ["arm0", "arm1", "arm2", "arm3"]
-METRICS = ["dice", "sensitivity", "specificity", "hd95", "lesion_f1"]
+METRICS = [
+    "dice", 
+    "sensitivity", 
+    "false_positive_lesions_count", 
+    "hd95", 
+    "lesion_wise_dice", 
+    "lesion_wise_nsd", 
+    "lesion_wise_f1", 
+    "small_lesion_recall"
+]
 
 def load_patient_metrics(results_dir: str, arm: str, cohort: str) -> dict:
     """Loads patient-wise metrics if file exists."""
@@ -74,6 +83,12 @@ def main(results_dir: str) -> None:
                     aligned_a = [scores_a[c].get(metric, float('nan')) for c in cases if c in scores_b]
                     aligned_b = [scores_b[c].get(metric, float('nan')) for c in cases if c in scores_b]
                     
+                    # Skip if all are nan or empty
+                    valid_a = [x for x in aligned_a if not np.isnan(x)]
+                    valid_b = [x for x in aligned_b if not np.isnan(x)]
+                    if len(valid_a) == 0 or len(valid_b) == 0:
+                        continue
+                        
                     # Run significance test (automatically routes to Wilcoxon or McNemar)
                     res = run_significance_test(aligned_a, aligned_b, metric)
                     
@@ -116,9 +131,6 @@ def main(results_dir: str) -> None:
                 std_dr = summary.get("std_detection_rate", float('nan'))
                 row["detection_rate_mean"] = mean_dr
                 row["detection_rate_std"] = std_dr
-                
-                # Fetch significance flags for Arm 2 and Arm 3 from correction
-                # Arm 2 vs Arm 1 (dagger), Arm 2 vs Arm 0 (double dagger), Arm 3 vs others
                 row["detection_rate_marker"] = get_sig_markers(df_sig, cohort, "detection_rate", arm)
                 
                 for metric in METRICS:
@@ -194,9 +206,10 @@ def generate_latex_code(df: pd.DataFrame) -> str:
     latex.append(r"\begin{table*}[t]")
     latex.append(r"\centering")
     latex.append(r"\caption{Segmentation performance across cohorts (mean $\pm$ std). Wilcoxon/McNemar significance markers: Arm 2 vs Arm 1 ($^\dagger$), Arm 2 vs Arm 0 ($^\ddagger$), Arm 2 vs Arm 3 ($^\S$), Arm 3 vs Arm 1 ($^*$), Arm 3 vs Arm 0 ($^\#$), $p < 0.05$ after Benjamini-Hochberg FDR correction.}")
-    latex.append(r"\begin{tabular}{llccccc}")
+    # 10 columns: Cohort, Method, Dice, Sens, FP/Pat., HD95, Lesion Dice, Lesion NSD, Lesion F1, Small Recall
+    latex.append(r"\begin{tabular}{llcccccccc}")
     latex.append(r"\hline")
-    latex.append(r"Cohort & Method & Dice & Sensitivity & Specificity & HD95 (mm) & Lesion F1 \\")
+    latex.append(r"Cohort & Method & Voxel Dice & Sens & FP / Patient & HD95 (mm) & Lesion Dice & Lesion NSD & Lesion F1 & Small Recall \\")
     latex.append(r"\hline")
     
     cohort_names = {
@@ -229,10 +242,10 @@ def generate_latex_code(df: pd.DataFrame) -> str:
             marker = row.get("detection_rate_marker", "")
             
             if np.isnan(mean_dr):
-                metrics_line = "- & - & - & - & -"
+                metrics_line = "- & - & - & - & - & - & - & -"
             else:
                 marker_str = f"^{{{marker}}}" if marker else ""
-                metrics_line = f"Det. Rate: {mean_dr:.3f} $\\pm$ {std_dr:.3f}{marker_str} & - & - & - & -"
+                metrics_line = f"Det. Rate: {mean_dr:.3f} $\\pm$ {std_dr:.3f}{marker_str} & - & - & - & - & - & - & -"
         else:
             metrics_strs = []
             for m in METRICS:
@@ -244,7 +257,12 @@ def generate_latex_code(df: pd.DataFrame) -> str:
                     metrics_strs.append("-")
                 else:
                     marker_str = f"^{{{marker}}}" if marker else ""
-                    metrics_strs.append(f"{mean:.3f} $\\pm$ {std:.3f}{marker_str}")
+                    if m == "false_positive_lesions_count":
+                        metrics_strs.append(f"{mean:.2f} $\\pm$ {std:.2f}{marker_str}")
+                    elif m == "hd95":
+                        metrics_strs.append(f"{mean:.2f} $\\pm$ {std:.2f}{marker_str}")
+                    else:
+                        metrics_strs.append(f"{mean:.3f} $\\pm$ {std:.3f}{marker_str}")
             metrics_line = " & ".join(metrics_strs)
             
         latex.append(f"{cohort_display} & {method_display} & {metrics_line} \\\\")
@@ -290,32 +308,51 @@ def create_mock_results(results_dir: str) -> None:
                 for c in cases:
                     if arm == "arm3":
                         # Combined: specificity of arm0 (~0.95) + sensitivity/Dice of arm2 (~0.84 / ~0.82)
-                        dice = np.random.uniform(0.78, 0.86)
-                        sens = np.random.uniform(0.80, 0.88)
-                        spec = np.random.uniform(0.92, 0.98)  # Best of both worlds
-                        hd95 = np.random.uniform(1.5, 3.5)
-                        f1 = np.random.uniform(0.78, 0.88)
+                        dice = np.random.uniform(0.52, 0.65)
+                        sens = np.random.uniform(0.70, 0.85)
+                        fp_count = np.random.uniform(1.5, 4.0)
+                        hd95 = np.random.uniform(3.0, 8.0)
+                        lw_dice = np.random.uniform(0.55, 0.68)
+                        lw_nsd = np.random.uniform(0.50, 0.64)
+                        lw_f1 = np.random.uniform(0.70, 0.85)
+                        small_recall = np.random.uniform(0.40, 0.65)
                     elif arm == "arm2":
-                        dice = np.random.uniform(0.72, 0.88)
-                        sens = np.random.uniform(0.75, 0.90)
-                        spec = np.random.uniform(0.72, 0.78)  # Reduced after leakage fix
-                        hd95 = np.random.uniform(2.5, 5.0)
-                        f1 = np.random.uniform(0.72, 0.82)
+                        dice = np.random.uniform(0.45, 0.58)
+                        sens = np.random.uniform(0.65, 0.78)
+                        fp_count = np.random.uniform(10.0, 20.0)
+                        hd95 = np.random.uniform(5.0, 12.0)
+                        lw_dice = np.random.uniform(0.48, 0.60)
+                        lw_nsd = np.random.uniform(0.42, 0.56)
+                        lw_f1 = np.random.uniform(0.60, 0.75)
+                        small_recall = np.random.uniform(0.35, 0.55)
                     elif arm == "arm1":
-                        dice = np.random.uniform(0.68, 0.82)
-                        sens = np.random.uniform(0.73, 0.88)
-                        spec = np.random.uniform(0.52, 0.68)
-                        hd95 = np.random.uniform(3.0, 7.5)
-                        f1 = np.random.uniform(0.62, 0.80)
+                        dice = np.random.uniform(0.35, 0.48)
+                        sens = np.random.uniform(0.40, 0.55)
+                        fp_count = np.random.uniform(8.0, 15.0)
+                        hd95 = np.random.uniform(12.0, 20.0)
+                        lw_dice = np.random.uniform(0.37, 0.50)
+                        lw_nsd = np.random.uniform(0.32, 0.46)
+                        lw_f1 = np.random.uniform(0.40, 0.55)
+                        small_recall = np.random.uniform(0.15, 0.30)
                     else: # arm0
-                        dice = np.random.uniform(0.65, 0.80)
-                        sens = np.random.uniform(0.65, 0.80)
-                        spec = np.random.uniform(0.88, 0.95)  # High specificity, low Dice/Sens
-                        hd95 = np.random.uniform(3.5, 8.0)
-                        f1 = np.random.uniform(0.60, 0.78)
+                        dice = np.random.uniform(0.30, 0.45)
+                        sens = np.random.uniform(0.35, 0.50)
+                        fp_count = np.random.uniform(2.0, 5.0)
+                        hd95 = np.random.uniform(15.0, 25.0)
+                        lw_dice = np.random.uniform(0.32, 0.47)
+                        lw_nsd = np.random.uniform(0.28, 0.42)
+                        lw_f1 = np.random.uniform(0.35, 0.50)
+                        small_recall = np.random.uniform(0.10, 0.25)
                         
                     patient_wise[c] = {
-                        "dice": dice, "sensitivity": sens, "specificity": spec, "hd95": hd95, "lesion_f1": f1
+                        "dice": dice,
+                        "sensitivity": sens,
+                        "false_positive_lesions_count": fp_count,
+                        "hd95": hd95,
+                        "lesion_wise_dice": lw_dice,
+                        "lesion_wise_nsd": lw_nsd,
+                        "lesion_wise_f1": lw_f1,
+                        "small_lesion_recall": small_recall
                     }
                     
                 patient_path = os.path.join(results_dir, f"{arm}_{cohort}_patients.json")
@@ -324,9 +361,12 @@ def create_mock_results(results_dir: str) -> None:
                     
                 summary = {}
                 for m in METRICS:
-                    vals = [p[m] for p in patient_wise.values()]
+                    vals = [p[m] for p in patient_wise.values() if not np.isnan(p[m])]
                     summary[f"mean_{m}"] = float(np.mean(vals))
                     summary[f"std_{m}"] = float(np.std(vals))
+                
+                # add per patient normalized FP count
+                summary["mean_false_positive_lesions_per_patient"] = summary["mean_false_positive_lesions_count"]
                     
                 summary_path = os.path.join(results_dir, f"{arm}_{cohort}_summary.json")
                 with open(summary_path, "w") as f:
