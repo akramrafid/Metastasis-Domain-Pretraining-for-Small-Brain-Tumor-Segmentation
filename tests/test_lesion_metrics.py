@@ -55,20 +55,25 @@ def test_connected_component_and_metrics() -> None:
     pred[1:4, 1:4, 1:4] = 1
     # 2. Small pred overlapping small target (size 8 < 27)
     pred[7:9, 7:9, 7:9] = 1
-    # 3. Disjoint false positive prediction at [9:11, 1:3, 9:11] (size 8 < 27)
-    # This is disjoint from large target [1:4, 1:4, 1:4] and small target [7:9, 7:9, 7:9]
+    # 3. Disjoint small false positive prediction at [9:11, 1:3, 9:11] (size 8 < 27)
+    # This is disjoint from target lesions
     pred[9:11, 1:3, 9:11] = 1
+    # 4. Disjoint large false positive prediction at [1:4, 7:10, 7:10] (size 27 >= 27)
+    # This is also disjoint from target lesions
+    pred[1:4, 7:10, 7:10] = 1
     
     spacing = np.array([1.0, 1.0, 1.0])
     metrics = compute_lesion_wise_metrics(pred, target, spacing)
     
     # Large metrics:
-    # Target large mask has target[1:4, 1:4, 1:4] (1 lesion)
-    # Pred large mask has pred[1:4, 1:4, 1:4] (1 lesion)
-    # They overlap perfectly!
-    assert abs(metrics["lesion_wise_dice"] - 1.0) < 1e-5
-    assert abs(metrics["lesion_wise_nsd"] - 1.0) < 1e-5
-    assert abs(metrics["lesion_wise_f1"] - 1.0) < 1e-5
+    # Target large mask has target[1:4, 1:4, 1:4] (1 lesion, size 27)
+    # Pred large mask has pred[1:4, 1:4, 1:4] (size 27) and pred[1:4, 7:10, 7:10] (size 27)
+    # Target has 27 voxels, Pred has 54 voxels, intersection is 27 voxels.
+    # Lesion-wise voxel Dice on large components = 2 * 27 / (27 + 54) = 54 / 81 = 0.666667
+    assert abs(metrics["lesion_wise_dice"] - 0.666667) < 1e-5
+    assert metrics["lesion_wise_nsd"] < 1.0
+    # Lesion-wise F1: TP=1, FP=1, FN=0 -> Precision=0.5, Recall=1.0 -> F1=0.66667
+    assert abs(metrics["lesion_wise_f1"] - 0.666667) < 1e-5
     
     # Small target recall:
     # There is 1 small target lesion of size 8. It overlaps with pred[7:9, 7:9, 7:9].
@@ -78,9 +83,12 @@ def test_connected_component_and_metrics() -> None:
     # False Positive predicted components:
     # - pred[1:4, 1:4, 1:4] overlaps with GT (not FP)
     # - pred[7:9, 7:9, 7:9] overlaps with GT (not FP)
-    # - pred[9:11, 1:3, 9:11] has zero target overlap (is FP!)
-    # Total FP count = 1
+    # - pred[9:11, 1:3, 9:11] has zero target overlap but is size 8 < 27 (not counted in large FP, but is a speckle FP)
+    # - pred[9:12, 4:7, 9:12] has zero target overlap and is size 27 >= 27 (is a large FP!)
+    # Total large FP count = 1
+    # Total speckle FP count = 2
     assert int(metrics["false_positive_lesions_count"]) == 1
+    assert int(metrics["false_positive_speckle_count"]) == 2
 
 def test_small_lesion_recall_undetected() -> None:
     """Verifies that undetected small lesions are correctly reported."""

@@ -63,8 +63,16 @@ def main(cfg: DictConfig) -> None:
     
     device = config.get("device", "cuda")
     
+    # Filter target arms if specified in config (e.g. arms=arm0,arm1)
+    target_arms = config.get("arms", ["arm0", "arm1", "arm2", "arm3"])
+    if isinstance(target_arms, str):
+        target_arms = [a.strip() for a in target_arms.split(",")]
+    logger.info(f"Target arms to evaluate: {target_arms}")
+    
     # Loop over models and cohorts
     for model_name, ckpt_path in checkpoints.items():
+        if model_name not in target_arms:
+            continue
         if not os.path.exists(ckpt_path):
             logger.warning(f"Checkpoint for {model_name} not found at {ckpt_path}. Skipping.")
             continue

@@ -241,11 +241,10 @@ def compute_lesion_wise_metrics(
         small_tp = int(np.sum(small_overlap_sums > 0))
         small_lesion_recall = small_tp / len(small_target_indices)
         
-    # 5. False Positive Lesion Count (number of predicted components of any size with zero target overlap)
-    if num_pred > 0:
+    # 5. False Positive Lesion Count (number of predicted components >= 27 voxels with zero target overlap)
+    if len(large_pred_indices) > 0:
         from scipy.ndimage import sum as nd_sum
-        pred_indices = list(range(1, num_pred + 1))
-        fp_sums = nd_sum(target_np, pred_labels, pred_indices)
+        fp_sums = nd_sum(target_np, pred_labels, large_pred_indices)
         if isinstance(fp_sums, (float, int, np.integer, np.floating)):
             fp_sums = np.array([fp_sums])
         else:
@@ -253,11 +252,25 @@ def compute_lesion_wise_metrics(
         false_positive_lesions_count = int(np.sum(fp_sums == 0))
     else:
         false_positive_lesions_count = 0
+        
+    # 6. False Positive Speckle Count (number of predicted components of any size with zero target overlap)
+    if num_pred > 0:
+        from scipy.ndimage import sum as nd_sum
+        pred_indices = list(range(1, num_pred + 1))
+        all_fp_sums = nd_sum(target_np, pred_labels, pred_indices)
+        if isinstance(all_fp_sums, (float, int, np.integer, np.floating)):
+            all_fp_sums = np.array([all_fp_sums])
+        else:
+            all_fp_sums = np.asarray(all_fp_sums)
+        false_positive_speckle_count = int(np.sum(all_fp_sums == 0))
+    else:
+        false_positive_speckle_count = 0
             
     return {
         "lesion_wise_dice": lesion_wise_dice,
         "lesion_wise_nsd": lesion_wise_nsd,
         "lesion_wise_f1": lesion_wise_f1,
         "small_lesion_recall": small_lesion_recall,
-        "false_positive_lesions_count": float(false_positive_lesions_count)
+        "false_positive_lesions_count": float(false_positive_lesions_count),
+        "false_positive_speckle_count": float(false_positive_speckle_count)
     }

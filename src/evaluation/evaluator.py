@@ -174,7 +174,8 @@ def run_evaluation(
                         "lesion_wise_nsd": lw_metrics["lesion_wise_nsd"],
                         "lesion_wise_f1": lw_metrics["lesion_wise_f1"],
                         "small_lesion_recall": lw_metrics["small_lesion_recall"],
-                        "false_positive_lesions_count": lw_metrics["false_positive_lesions_count"]
+                        "false_positive_lesions_count": lw_metrics["false_positive_lesions_count"],
+                        "false_positive_speckle_count": lw_metrics["false_positive_speckle_count"]
                     }
                 else:
                     # Unlabeled case: calculate detection rate (1.0 if any predicted lesion with volume >= 27 voxels)
@@ -203,7 +204,8 @@ def run_evaluation(
     if labeled:
         metrics_keys = ["dice", "sensitivity", "specificity", "hd95", 
                         "lesion_wise_dice", "lesion_wise_nsd", "lesion_wise_f1", 
-                        "small_lesion_recall", "false_positive_lesions_count"]
+                        "small_lesion_recall", "false_positive_lesions_count",
+                        "false_positive_speckle_count"]
         for k in metrics_keys:
             values = [p[k] for p in patient_metrics.values() if not np.isnan(p[k])]
             if values:
@@ -220,6 +222,14 @@ def run_evaluation(
             summary_metrics["mean_false_positive_lesions_per_patient"] = float(np.sum(fp_values) / num_patients)
         else:
             summary_metrics["mean_false_positive_lesions_per_patient"] = 0.0
+            
+        # Also compute and report the cohort-wide normalized False Positive speckles per patient
+        fps_values = [p["false_positive_speckle_count"] for p in patient_metrics.values()]
+        if fps_values:
+            num_patients = len(patient_metrics)
+            summary_metrics["mean_false_positive_speckles_per_patient"] = float(np.sum(fps_values) / num_patients)
+        else:
+            summary_metrics["mean_false_positive_speckles_per_patient"] = 0.0
     else:
         values = [p["detection_rate"] for p in patient_metrics.values()]
         if values:
